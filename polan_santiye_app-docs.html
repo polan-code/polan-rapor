@@ -704,6 +704,12 @@ function updateSayfaFromDate() {
   document.getElementById('sayfaNo').value = computeSayfa(dateVal);
 }
 
+document.getElementById('inputDate').addEventListener('change', () => {
+  updateSayfaFromDate();
+  fetchTemperature();
+  fetchFromDocs(true);
+});
+
 // (date change handled in Docs section above + sayfa/temp below)
 // Char count
 function updateCharCount() {
