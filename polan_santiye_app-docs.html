@@ -425,9 +425,9 @@ Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></tex
     </div>
   </div>
 
-  <!-- GOOGLE SHEET SYNC -->
+  <!-- GOOGLE DOCS SYNC -->
   <div class="section">
-    <div class="section-label">Synchronisation Google Sheet <span id="sheetSyncBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--bg3);color:var(--muted);margin-left:6px;">inactif</span></div>
+    <div class="section-label">Synchronisation Google Docs <span id="sheetSyncBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--bg3);color:var(--muted);margin-left:6px;">inactif</span></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <div style="flex:1;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:Arial,monospace;font-size:13px;color:var(--muted);">
         📄 Google Doc lié — synchro selon la date sélectionnée
@@ -875,58 +875,64 @@ async function generateExcel() {
   btn.disabled = false;
 }
 
-// ── GOOGLE SHEET SYNC ───────────────────────────────────────
+// ── GOOGLE DOCS SYNC ───────────────────────────────────────
 // URL de publication du Google Doc
 function getDocUrl() {
-  return 'https://docs.google.com/document/d/e/2PACX-1vQg8EnMFiBnvuA9jjBmpNwe_EKQmPQBm6dyl3xD0nzq2GtlQUNEQUvFrH__OZKDxefQJ0w0Lz8jWjqI/pub';
+  return 'https://docs.google.com/document/d/e/2PACX-1vRGtX4MUzB8P9S_-Jg5JbtmSMvExZKkSaJPD8qgvAWPh7o4bvTgXNhJZ1WBjhT6CeEyVT-ykBRuo_TS/pub';
 }
 
 let sheetSyncInterval = null;
 
 function parseDocForDate(html, targetDate) {
-  // targetDate = Date object
   const MONTHS_TR = {
     1:'Ocak',2:'Şubat',3:'Mart',4:'Nisan',5:'Mayıs',
     6:'Haziran',7:'Temmuz',8:'Ağustos',9:'Eylül',
     10:'Ekim',11:'Kasım',12:'Aralık'
   };
   const d = targetDate;
-  const dateStr = `${String(d.getDate()).padStart(2,'0')} ${MONTHS_TR[d.getMonth()+1]} ${d.getFullYear()}`;
+  const dateStr = String(d.getDate()).padStart(2,'0') + ' ' + MONTHS_TR[d.getMonth()+1] + ' ' + d.getFullYear();
 
-  // Parser le HTML du doc pour trouver la section de la bonne date
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const allH1 = Array.from(doc.querySelectorAll('h1'));
-  
-  // Trouver le h1 qui correspond à la date
-  let targetH1 = null;
-  for (const h1 of allH1) {
-    if (h1.textContent.trim().includes(dateStr)) {
-      targetH1 = h1;
+  const docEl = parser.parseFromString(html, 'text/html');
+
+  // Chercher le H1 qui correspond EXACTEMENT à la date sélectionnée
+  const allHeadings = Array.from(docEl.querySelectorAll('h1, h2, h3, p'));
+  let targetEl = null;
+
+  for (const el of allHeadings) {
+    if (el.textContent.trim() === dateStr) {
+      targetEl = el;
       break;
     }
   }
-  
-  if (!targetH1) return '';
 
-  // Récupérer tout le contenu jusqu'au prochain h1
+  if (!targetEl) return '';
+
+  // Collecter tout jusqu'au prochain titre de date (H1 de même niveau)
   const notes = [];
   let currentSection = null;
-  let el = targetH1.nextElementSibling;
-  
-  while (el && el.tagName !== 'H1') {
-    if (el.tagName === 'H2') {
-      currentSection = el.textContent.trim();
+  let el = targetEl.nextElementSibling;
+
+  while (el) {
+    const tag  = el.tagName;
+    const text = el.textContent.trim();
+
+    // Arrêter dès qu'on rencontre un autre titre de date (H1)
+    if (tag === 'H1' && text !== dateStr) break;
+
+    if (tag === 'H2') {
+      currentSection = text;
+    } else if (tag === 'H3') {
+      currentSection = text;
     } else {
-      const text = el.textContent.trim();
-      // Ignorer les placeholders vides (—) et les textes trop courts
-      if (currentSection && text && text !== '—' && text.length > 2) {
-        notes.push(`${currentSection} - ${text}`);
+      // Ignorer les lignes vides, tirets, et placeholders
+      if (currentSection && text && text !== '—' && text !== '-' && text.length > 2) {
+        notes.push(currentSection + ' - ' + text);
       }
     }
     el = el.nextElementSibling;
   }
-  
+
   return notes.join('\n');
 }
 
