@@ -876,10 +876,9 @@ async function generateExcel() {
 }
 
 // ── GOOGLE SHEET SYNC ───────────────────────────────────────
-const DOC_ID = '1uDWrqrz5kutVCm0FtRTxYqnWYnKDc_EOCWfYh47m8tQ';
-// URL de publication du Google Doc (texte brut)
+// URL de publication du Google Doc
 function getDocUrl() {
-  return `https://docs.google.com/document/d/${DOC_ID}/pub`;
+  return 'https://docs.google.com/document/d/e/2PACX-1vQg8EnMFiBnvuA9jjBmpNwe_EKQmPQBm6dyl3xD0nzq2GtlQUNEQUvFrH__OZKDxefQJ0w0Lz8jWjqI/pub';
 }
 
 let sheetSyncInterval = null;
