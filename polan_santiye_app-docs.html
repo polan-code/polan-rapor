@@ -406,6 +406,36 @@
     </div>
   </div>
 
+  <!-- GOOGLE DOCS SYNC -->
+  <div class="section">
+    <div class="section-label">📄 Notes depuis Google Docs</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button class="btn btn-outline" onclick="fetchFromDocs()" id="btnDocs" style="flex:1;min-width:200px;">
+        ↓ Charger les notes du jour
+      </button>
+      <span id="docsStatus" style="font-size:13px;color:var(--muted);font-family:Arial,monospace;">
+        Cliquez pour charger les notes depuis le Docs
+      </span>
+    </div>
+    <!-- Tableau de prévisualisation des notes brutes par chef/lieu -->
+    <div id="docsPreview" style="display:none;margin-top:16px;overflow-x:auto;">
+      <table id="docsTable" style="width:100%;border-collapse:collapse;font-size:13px;font-family:Arial,sans-serif;">
+        <thead>
+          <tr>
+            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:6px 0 0 0;">Section</th>
+            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;">M</th>
+            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;">G</th>
+            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:0 6px 0 0;">P</th>
+          </tr>
+        </thead>
+        <tbody id="docsTableBody"></tbody>
+      </table>
+      <button class="btn btn-gold" onclick="transferDocsToTextarea()" style="margin-top:12px;width:100%;">
+        ✦ Utiliser ces notes → zone de saisie
+      </button>
+    </div>
+  </div>
+
   <!-- NOTES -->
   <div class="section">
     <div class="section-label">Notes du chantier</div>
@@ -422,20 +452,6 @@ Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></tex
         <span class="notes-hint">Français, turc ou les deux · L'IA traduit tout en turc</span>
         <span class="char-count" id="charCount">0 car.</span>
       </div>
-    </div>
-  </div>
-
-  <!-- GOOGLE DOCS SYNC -->
-  <div class="section">
-    <div class="section-label">Synchronisation Google Docs <span id="sheetSyncBadge" style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--bg3);color:var(--muted);margin-left:6px;">inactif</span></div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <div style="flex:1;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);font-family:Arial,monospace;font-size:13px;color:var(--muted);">
-        📄 Google Doc lié — synchro selon la date sélectionnée
-      </div>
-      <button class="btn btn-outline" onclick="syncSheetNow()" id="btnSync">⟳ Sync maintenant</button>
-    </div>
-    <div style="margin-top:8px;font-size:12px;color:var(--muted);font-family:Arial,monospace;" id="sheetSyncStatus">
-      ℹ️ Récupère les notes du jour sélectionné dans le Doc. Sync auto toutes les heures.
     </div>
   </div>
 
@@ -477,9 +493,28 @@ Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></tex
 
 <script>
 // ── CONFIG ──────────────────────────────────────────────────
-const GROQ_API_KEY = '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'; // console.groq.com → free
+const GROQ_API_KEY = 'gsk_REMPLACE_PAR_TA_CLE_GROQ'; // console.groq.com → free
 const GROQ_MODEL   = 'llama-3.3-70b-versatile';
 const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
+// ────────────────────────────────────────────────────────────
+
+// ── Google Sheets ───────────────────────────────────────────
+const SHEET_ID = '1lWyxJMyiaikm6uxZviAzoAA-6jUwnSXPo0zqAjNpwYk';
+const CHEFS    = ['M', 'G', 'P'];
+const LIEUX    = [
+  'Ay Yıldız Köprüsü',
+  'Toprakarme',
+  'Türk Kızılayı Alt Geçidi',
+  'Üst Yapı - 2453 Cadde',
+  'Ay Yıldız Tali Yol-01',
+  'Bağlantı Yolu-1',
+  'Kol-1',
+  'Kol-2',
+  '11. Hava Üssü',
+  'Autres notes',
+];
+let sheetNotes   = {};   // { lieu: { M: '...', G: '...', P: '...' } }
+let sheetRefresh = null; // setInterval handle
 // ────────────────────────────────────────────────────────────
 
 const CATEGORIES = [
@@ -547,7 +582,218 @@ async function fetchTemperature() {
   document.getElementById('tempLoading').style.display = 'none';
 }
 
-// ── Auto Sayfa No — référence fixe : 24 Mai 2026 = 210 ─────
+// ── Google Docs Integration ─────────────────────────────────
+const DOCS_ID     = '1GDrX5s4HTUv9BZMxZIz4Hae6qWyjc44HG-UBk-PfxDQ';
+const DOCS_URL    = 'https://docs.google.com/document/d/e/2PACX-1vRGtX4MUzB8P9S_-Jg5JbtmSMvExZKkSaJPD8qgvAWPh7o4bvTgXNhJZ1WBjhT6CeEyVT-ykBRuo_TS/pub';
+const DOCS_LIEUX  = [
+  'Ay Yıldız Köprüsü','Toprakarme','Türk Kızılayı Alt Geçidi',
+  'Üst Yapı - 2453 Cadde','Ay Yıldız Tali Yol-01','Bağlantı Yolu-1',
+  'Kol-1','Kol-2','11. Hava Üssü'
+];
+
+const MONTHS_TR = {
+  '01':'Ocak','02':'Şubat','03':'Mart','04':'Nisan','05':'Mayıs',
+  '06':'Haziran','07':'Temmuz','08':'Ağustos','09':'Eylül',
+  '10':'Ekim','11':'Kasım','12':'Aralık'
+};
+
+let docsRawData   = null; // HTML brut du Docs en cache
+let docsLastFetch = 0;
+let docsNotesData = {};   // { lieu: { M:'...', G:'...', P:'...' } }
+let docsRefreshInterval = null;
+
+// Convertit une date ISO (2026-05-25) en label Docs ("25 Mayıs 2026")
+function isoToDocsLabel(isoDate) {
+  const [yyyy, mm, dd] = isoDate.split('-');
+  return `${dd} ${MONTHS_TR[mm]} ${yyyy}`;
+}
+
+// Télécharge et met en cache le HTML du Docs
+async function loadDocsHtml(force = false) {
+  const now = Date.now();
+  if (!force && docsRawData && (now - docsLastFetch) < 3600000) {
+    return docsRawData; // cache valide (1h)
+  }
+  const resp = await fetch(DOCS_URL);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  docsRawData  = await resp.text();
+  docsLastFetch = now;
+  return docsRawData;
+}
+
+// Parse le HTML du Docs publié et extrait les notes pour une date donnée
+function parseDocsForDate(html, dateLabel) {
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(html, 'text/html');
+
+  // Google Docs published HTML: headings are <h1>, <h2> with nested <span>
+  // getText normalise les espaces invisibles Google (&#160; etc.)
+  const getText = el => el.textContent.replace(/\u00a0/g, ' ').trim();
+
+  const allEl = [...doc.querySelectorAll('h1, h2, p, li')];
+
+  // Trouve le H1 correspondant à la date
+  let startIdx = -1;
+  for (let i = 0; i < allEl.length; i++) {
+    if (allEl[i].tagName === 'H1' && getText(allEl[i]) === dateLabel) {
+      startIdx = i;
+      break;
+    }
+  }
+  if (startIdx === -1) return null;
+
+  // Collecte les éléments jusqu'au prochain H1
+  const block = [];
+  for (let i = startIdx + 1; i < allEl.length; i++) {
+    if (allEl[i].tagName === 'H1') break;
+    block.push(allEl[i]);
+  }
+
+  // Résultat : { lieu: ['note1', 'note2', ...] }
+  const result = {};
+  DOCS_LIEUX.forEach(l => result[l] = []);
+
+  let currentLieu = null;
+  for (const el of block) {
+    const text = getText(el);
+    if (!text) continue;
+
+    if (el.tagName === 'H2') {
+      // Cherche le lieu correspondant (comparaison souple)
+      currentLieu = DOCS_LIEUX.find(l =>
+        text.toLowerCase().startsWith(l.toLowerCase().substring(0, 6))
+      ) || null;
+      continue;
+    }
+
+    // Paragraphe/liste → note sous la section courante
+    if (currentLieu && text.length > 1) {
+      result[currentLieu].push(text);
+    }
+  }
+
+  return result;
+}
+
+// Affiche le tableau des notes par lieu (simplifié : une colonne "Notes")
+function renderDocsTable(data) {
+  const tbody = document.getElementById('docsTableBody');
+  const thead = document.querySelector('#docsTable thead tr');
+  tbody.innerHTML = '';
+  docsNotesData = data;
+
+  // Thead simplifié
+  thead.innerHTML = `
+    <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:6px 0 0 0;width:35%;">Section</th>
+    <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:0 6px 0 0;">Notes saisies</th>`;
+
+  let totalNotes = 0;
+  for (const lieu of DOCS_LIEUX) {
+    const notes  = data[lieu] || [];
+    totalNotes  += notes.length;
+    const tr     = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--border)';
+    tr.style.background   = notes.length ? 'var(--bg3)' : 'transparent';
+    tr.innerHTML = `
+      <td style="padding:8px 12px;font-weight:bold;color:var(--gold2);vertical-align:top;">${lieu}</td>
+      <td style="padding:8px 12px;vertical-align:top;color:var(--text);white-space:pre-wrap;">${
+        notes.length
+          ? notes.map(n => '• ' + n).join('\n')
+          : '<span style="color:var(--muted)">—</span>'
+      }</td>`;
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('docsPreview').style.display = 'block';
+  return totalNotes;
+}
+
+// Transfère les notes vers le textarea pour traitement IA
+function transferDocsToTextarea() {
+  const lines = [];
+  for (const lieu of DOCS_LIEUX) {
+    const notes = docsNotesData[lieu] || [];
+    if (notes.length) {
+      notes.forEach(n => lines.push(`${lieu} - ${n}`));
+    }
+  }
+  if (lines.length) {
+    document.getElementById('notesInput').value = lines.join('\n');
+    updateCharCount();
+    setStatus('success', `✓ ${lines.length} notes chargées depuis le Docs`);
+    document.getElementById('notesInput').scrollIntoView({ behavior:'smooth' });
+  } else {
+    setStatus('error', 'Aucune note trouvée pour cette date dans le Docs');
+  }
+}
+
+// Fonction principale : charger depuis le Docs
+async function fetchFromDocs(silent = false) {
+  const dateVal = document.getElementById('inputDate').value;
+  if (!dateVal) { setStatus('error', 'Sélectionne une date d\'abord'); return; }
+
+  const label = isoToDocsLabel(dateVal);
+  const btn   = document.getElementById('btnDocs');
+  const ds    = document.getElementById('docsStatus');
+
+  btn.disabled = true;
+  ds.textContent = `Chargement… (${label})`;
+  if (!silent) setStatus('loading', `Lecture du Docs pour le ${label}…`);
+
+  try {
+    const html = await loadDocsHtml();
+    const data = parseDocsForDate(html, label);
+
+    if (!data) {
+      ds.textContent = `⚠ Date "${label}" absente du Docs`;
+      if (!silent) setStatus('error', `Date "${label}" introuvable dans le Docs`);
+    } else {
+      const total = renderDocsTable(data);
+      const now = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      ds.textContent = `✓ ${total} notes · mis à jour à ${now}`;
+      if (!silent) setStatus('success', `✓ ${total} notes chargées pour le ${label}`);
+    }
+  } catch(e) {
+    ds.textContent = '✗ Erreur de chargement';
+    if (!silent) setStatus('error', 'Erreur Docs : ' + e.message);
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+// Auto-refresh toutes les heures
+function startDocsAutoRefresh() {
+  if (docsRefreshInterval) clearInterval(docsRefreshInterval);
+  docsRefreshInterval = setInterval(() => {
+    // Recharge le Docs en forçant (bypass cache)
+    docsRawData   = null;
+    docsLastFetch = 0;
+    fetchFromDocs(true); // silent = pas de setStatus
+  }, 3600000); // 1h
+}
+
+// Recharge aussi quand on change la date
+document.getElementById('inputDate').addEventListener('change', () => {
+  updateSayfaFromDate();
+  fetchTemperature();
+  if (docsRawData) {
+    const dateVal2 = document.getElementById('inputDate').value;
+    const label2   = isoToDocsLabel(dateVal2);
+    const data2    = parseDocsForDate(docsRawData, label2);
+    if (data2) {
+      renderDocsTable(data2);
+      document.getElementById('docsStatus').textContent = `✓ ${label2}`;
+    } else {
+      document.getElementById('docsTableBody').innerHTML = '';
+      document.getElementById('docsPreview').style.display = 'none';
+      document.getElementById('docsStatus').textContent = `⚠ Pas de données pour ${label2}`;
+    }
+  }
+});
+
+startDocsAutoRefresh();
+
+
 const SAYFA_REF_DATE  = new Date('2026-05-24T00:00:00');
 const SAYFA_REF_VALUE = 210;
 
@@ -563,11 +809,7 @@ function updateSayfaFromDate() {
   document.getElementById('sayfaNo').value = computeSayfa(dateVal);
 }
 
-document.getElementById('inputDate').addEventListener('change', () => {
-  updateSayfaFromDate();
-  fetchTemperature();
-});
-
+// (date change handled in Docs section above + sayfa/temp below)
 // Char count
 function updateCharCount() {
   const n = document.getElementById('notesInput').value.length;
@@ -658,7 +900,6 @@ RÈGLES STRICTES :
 5. Termine chaque action par "yapıldı." si pas déjà présent.
 6. Orthographe turque correcte avec tous les caractères spéciaux (ş, ğ, ı, ç, ö, ü).
 7. Réponds UNIQUEMENT avec les lignes reformatées, une par ligne. Aucune introduction, aucun commentaire.
-8. INTERDIT D'INVENTER : si une catégorie n'a pas de tâche mentionnée dans les notes, ne l'écris PAS. N'ajoute aucune tâche qui ne figure pas explicitement dans les notes brutes. Si les notes sont vides ou illisibles, réponds avec une seule ligne vide.
 
 Notes brutes :
 ${notes}`
@@ -875,119 +1116,7 @@ async function generateExcel() {
   btn.disabled = false;
 }
 
-// ── GOOGLE DOCS SYNC ───────────────────────────────────────
-// URL de publication du Google Doc
-function getDocUrl() {
-  return 'https://docs.google.com/document/d/e/2PACX-1vRGtX4MUzB8P9S_-Jg5JbtmSMvExZKkSaJPD8qgvAWPh7o4bvTgXNhJZ1WBjhT6CeEyVT-ykBRuo_TS/pub';
-}
-
-let sheetSyncInterval = null;
-
-function parseDocForDate(html, targetDate) {
-  const MONTHS_TR = {
-    1:'Ocak',2:'Şubat',3:'Mart',4:'Nisan',5:'Mayıs',
-    6:'Haziran',7:'Temmuz',8:'Ağustos',9:'Eylül',
-    10:'Ekim',11:'Kasım',12:'Aralık'
-  };
-  const d = targetDate;
-  const dateStr = String(d.getDate()).padStart(2,'0') + ' ' + MONTHS_TR[d.getMonth()+1] + ' ' + d.getFullYear();
-
-  const parser = new DOMParser();
-  const docEl = parser.parseFromString(html, 'text/html');
-
-  // Chercher le H1 qui correspond EXACTEMENT à la date sélectionnée
-  const allHeadings = Array.from(docEl.querySelectorAll('h1, h2, h3, p'));
-  let targetEl = null;
-
-  for (const el of allHeadings) {
-    if (el.textContent.trim() === dateStr) {
-      targetEl = el;
-      break;
-    }
-  }
-
-  if (!targetEl) return '';
-
-  // Collecter tout jusqu'au prochain titre de date (H1 de même niveau)
-  const notes = [];
-  let currentSection = null;
-  let el = targetEl.nextElementSibling;
-
-  while (el) {
-    const tag  = el.tagName;
-    const text = el.textContent.trim();
-
-    // Arrêter dès qu'on rencontre un autre titre de date (H1)
-    if (tag === 'H1' && text !== dateStr) break;
-
-    if (tag === 'H2') {
-      currentSection = text;
-    } else if (tag === 'H3') {
-      currentSection = text;
-    } else {
-      // Ignorer les lignes vides, tirets, et placeholders
-      if (currentSection && text && text !== '—' && text !== '-' && text.length > 2) {
-        notes.push(currentSection + ' - ' + text);
-      }
-    }
-    el = el.nextElementSibling;
-  }
-
-  return notes.join('\n');
-}
-
-async function syncSheetNow() {
-  const btn = document.getElementById('btnSync');
-  btn.disabled = true;
-  btn.textContent = '⟳ Sync...';
-  document.getElementById('sheetSyncStatus').textContent = '🔄 Récupération du document...';
-
-  try {
-    const url = getDocUrl();
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const html = await resp.text();
-    if (!html || html.length < 10) throw new Error('Document vide');
-
-    // Récupérer la date sélectionnée dans l'interface
-    const dateVal = document.getElementById('inputDate').value;
-    const targetDate = new Date(dateVal + 'T12:00:00');
-    
-    const parsed = parseDocForDate(html, targetDate);
-    document.getElementById('notesInput').value = parsed;
-    updateCharCount();
-
-    const now = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-    const lineCount = parsed.split('\n').filter(l => l.trim()).length;
-    document.getElementById('sheetSyncStatus').textContent = lineCount > 0 
-      ? `✓ Synchronisé à ${now} — ${lineCount} entrées trouvées`
-      : `✓ Synchronisé à ${now} — aucune entrée pour cette date`;
-    document.getElementById('sheetSyncBadge').textContent = 'actif';
-    document.getElementById('sheetSyncBadge').style.background = 'var(--green-bg)';
-    document.getElementById('sheetSyncBadge').style.color = 'var(--green)';
-    startAutoSync();
-
-  } catch(e) {
-    document.getElementById('sheetSyncStatus').textContent = `✗ Erreur : ${e.message}`;
-    document.getElementById('sheetSyncBadge').textContent = 'erreur';
-    document.getElementById('sheetSyncBadge').style.background = 'var(--red-bg)';
-    document.getElementById('sheetSyncBadge').style.color = 'var(--red)';
-  }
-
-  btn.disabled = false;
-  btn.textContent = '⟳ Sync maintenant';
-}
-
-function startAutoSync() {
-  if (sheetSyncInterval) clearInterval(sheetSyncInterval);
-  sheetSyncInterval = setInterval(syncSheetNow, 60 * 60 * 1000); // toutes les heures
-}
-
-function prefillSheetId() { /* Doc ID déjà intégré */ }
-// ────────────────────────────────────────────────────────────
-
 initDate();
-prefillSheetId();
 </script>
 </body>
 </html>
