@@ -449,7 +449,7 @@ Route 2453 drainage et montage mur
 Kol 1 liste
 Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></textarea>
       <div class="notes-toolbar">
-        <span class="notes-hint">Français, turc ou les deux · L'IA traduit tout en turc</span>
+        <span class="notes-hint">Français, turc, anglais ou un mélange · L'IA traduit tout en turc</span>
         <span class="char-count" id="charCount">0 car.</span>
       </div>
     </div>
@@ -492,43 +492,47 @@ Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></tex
 </div>
 
 <script>
-// ── CONFIG ──────────────────────────────────────────────────
-const GROQ_API_KEY = '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'; // console.groq.com → free
+// ╔══════════════════════════════════════════════════════════╗
+// ║  CONFIG — À MODIFIER POUR CHAQUE CHANTIER               ║
+// ╚══════════════════════════════════════════════════════════╝
+const CONFIG = {
+  // Identité du chantier
+  nomChantier:    'ETİMESGUT HAVAALİNİ BAĞLANTI YOLU',
+  nomSociete:     'POLAN',
+
+  // Clé API Groq (console.groq.com → gratuit)
+  groqApiKey:     'gsk_REMPLACE_PAR_TA_CLE_GROQ',
+
+  // URL de l'Apps Script Google (sert les notes du Docs)
+  appsScriptUrl:  'https://script.google.com/macros/s/AKfycbxdgtu8lO600x--JTXVrGUKJe3oxVUsMItM6hwN-oTrXaGBioyztg7XzsC7tj4MbRPj/exec',
+
+  // Référence Sayfa No : date ISO → numéro de page
+  sayfaRefDate:   '2026-05-24',
+  sayfaRefNo:     210,
+
+  // Coordonnées météo (Open-Meteo)
+  meteoLat:       39.9208,
+  meteoLon:       32.8541,
+  meteoTimezone:  'Europe/Istanbul',
+
+  // Nombre max de lignes dans le rapport Excel
+  maxLignes:      17,
+};
+// ╔══════════════════════════════════════════════════════════╗
+// ║  NE PAS MODIFIER EN DESSOUS (sauf si tu sais ce que     ║
+// ║  tu fais)                                               ║
+// ╚══════════════════════════════════════════════════════════╝
+
+const GROQ_API_KEY = CONFIG.groqApiKey;
 const GROQ_MODEL   = 'llama-3.3-70b-versatile';
 const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
-// ────────────────────────────────────────────────────────────
 
-// ── Google Sheets ───────────────────────────────────────────
-const SHEET_ID = '1lWyxJMyiaikm6uxZviAzoAA-6jUwnSXPo0zqAjNpwYk';
-const CHEFS    = ['M', 'G', 'P'];
-const LIEUX    = [
-  'Ay Yıldız Köprüsü',
-  'Toprakarme',
-  'Türk Kızılayı Alt Geçidi',
-  'Üst Yapı - 2453 Cadde',
-  'Ay Yıldız Tali Yol-01',
-  'Bağlantı Yolu-1',
-  'Kol-1',
-  'Kol-2',
-  '11. Hava Üssü',
-  'Autres notes',
-];
-let sheetNotes   = {};   // { lieu: { M: '...', G: '...', P: '...' } }
-let sheetRefresh = null; // setInterval handle
-// ────────────────────────────────────────────────────────────
+// Catégories dynamiques — chargées depuis le Docs via Apps Script
+// (null = pas encore chargées)
+let CATEGORIES_DYNAMIQUES = null;
 
-const CATEGORIES = [
-  'Ay Yıldız Köprüsü',
-  'Toprakarme',
-  'Türk Kızılayı Alt Geçidi',
-  'Üst Yapı',
-  '2453 Cadde',
-  '2453. Cadde',
-  'Ay Yıldız Tali Yol',
-  'Bağlantı Yolu',
-  'Kol-1','Kol 1','Kol-2','Kol 2',
-  '11. Hava Üssü','11 Hava Üssü',
-];
+// Fallback statique si le Docs n'est pas disponible
+const CATEGORIES_FALLBACK = [];
 
 let formattedNotes = [];
 let excelData = null;
@@ -565,8 +569,7 @@ async function fetchTemperature() {
   document.getElementById('tempValue').textContent = '—';
 
   try {
-    // Ankara : lat=39.9208, lon=32.8541
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=39.9208&longitude=32.8541&daily=temperature_2m_max&start_date=${dateVal}&end_date=${dateVal}&timezone=Europe%2FIstanbul`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.meteoLat}&longitude=${CONFIG.meteoLon}&daily=temperature_2m_max&start_date=${dateVal}&end_date=${dateVal}&timezone=${encodeURIComponent(CONFIG.meteoTimezone)}`;
     const resp = await fetch(url);
     const data = await resp.json();
     const temp = data.daily?.temperature_2m_max?.[0];
@@ -584,7 +587,7 @@ async function fetchTemperature() {
 
 // ── Google Docs Integration ─────────────────────────────────
 // Notes pré-parsées par GitHub Actions → docs_notes.json (même domaine, pas de CORS)
-const DOCS_JSON_URL = 'https://script.google.com/macros/s/AKfycbxdgtu8lO600x--JTXVrGUKJe3oxVUsMItM6hwN-oTrXaGBioyztg7XzsC7tj4MbRPj/exec';
+const DOCS_JSON_URL = CONFIG.appsScriptUrl;
 const DOCS_LIEUX = [
   'Ay Yıldız Köprüsü','Toprakarme','Türk Kızılayı Alt Geçidi',
   'Üst Yapı - 2453 Cadde','Ay Yıldız Tali Yol-01','Bağlantı Yolu-1',
@@ -603,6 +606,25 @@ let docsRefreshInterval = null;
 function isoToDocsLabel(isoDate) {
   const [yyyy, mm, dd] = isoDate.split('-');
   return `${dd} ${MONTHS_TR[mm]} ${yyyy}`;
+}
+
+// Récupère les catégories dynamiques depuis le Docs (H2 de la première date)
+async function loadCategories() {
+  if (CATEGORIES_DYNAMIQUES) return CATEGORIES_DYNAMIQUES;
+  try {
+    const resp = await fetch(CONFIG.appsScriptUrl + '?categories=1');
+    if (!resp.ok) throw new Error();
+    const data = await resp.json();
+    if (Array.isArray(data) && data.length > 0) {
+      CATEGORIES_DYNAMIQUES = data;
+      console.log('Catégories chargées depuis le Docs:', CATEGORIES_DYNAMIQUES);
+      return CATEGORIES_DYNAMIQUES;
+    }
+  } catch(e) {
+    console.warn('Catégories non disponibles, fallback statique');
+  }
+  CATEGORIES_DYNAMIQUES = CATEGORIES_FALLBACK;
+  return CATEGORIES_DYNAMIQUES;
 }
 
 async function loadDocsJson(dateLabel) {
@@ -689,8 +711,8 @@ function startDocsAutoRefresh() {
 startDocsAutoRefresh();
 
 
-const SAYFA_REF_DATE  = new Date('2026-05-24T00:00:00');
-const SAYFA_REF_VALUE = 210;
+const SAYFA_REF_DATE  = new Date(CONFIG.sayfaRefDate + 'T00:00:00');
+const SAYFA_REF_VALUE = CONFIG.sayfaRefNo;
 
 function computeSayfa(dateIso) {
   const d = new Date(dateIso + 'T00:00:00');
@@ -762,6 +784,7 @@ function clearAll() {
 // Main: process notes with AI
 async function processNotes() {
   const notes = document.getElementById('notesInput').value.trim();
+  const categories = await loadCategories(); // charge les catégories dynamiques
   const dateVal = document.getElementById('inputDate').value;
   const sayfaNo = document.getElementById('sayfaNo').value;
 
@@ -784,26 +807,50 @@ async function processNotes() {
       },
       body: JSON.stringify({
         model: GROQ_MODEL,
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: `Tu es un assistant de chantier BTP en Turquie.
-Les notes peuvent être en français, en turc, ou un mélange des deux.
-Tu dois TOUJOURS écrire le résultat UNIQUEMENT EN TURC dans le rapport.
+        max_tokens: 1500,
+        messages: [
+          {
+            role: 'system',
+            content: `Tu es un ingénieur BTP expert en rédaction de rapports journaliers de chantier en Turquie.
+Tu reçois des notes brutes en français, turc, anglais ou un mélange, et tu les reformates en lignes de rapport en turc.
 
-Reformate ces notes de chantier en lignes claires pour un rapport journalier Excel.
+VOCABULAIRE BTP DE RÉFÉRENCE (utilise ces termes exacts) :
+- coffrage → kalıp | décoffrage → kalıp sökümü | ferraillage → demir/donatı
+- béton → beton | coulage béton → beton dökümü | segment → segment
+- câble extradossé → ekstra dos kablo | gaine → kılıf | pylône → pilon
+- trumplate/trumplate → ankraj plakası | pulling stick → pulling stick
+- garde-corps → korkuluk | trottoir → kaldırım | drainage → drenaj
+- harpuşta/harpusta → harpuşta | refuge → refuge | grue → vinç
+- injection → enjeksiyon | compresseur → kompresör | huiler → yağlamak
+- terrassement → kazı | remblai → dolgu | montage → montaj | pose → döşeme
+- en cours / continue → devam ediyor | terminé/fini → tamamlandı/yapıldı
+- vérification → kontrol | nettoyage → temizlik | mise en place → yerleştirme
+
+EXEMPLES DE TRADUCTIONS CORRECTES :
+- "Le coffrage du pont a été replacé, nettoyé et huilé" → "Köprünün kalıbı yeniden yerleştirildi, temizlendi ve yağlandı."
+- "Le ferraillage du pylône continue" → "Pilon donatı çalışmaları devam ediyor."
+- "Les 5B ont été tirés avant le béton" → "5B kabloları beton dökülmeden önce çekilip yerleştirildi."
+- "Le coffrage latéral a été posé" → "Yan kalıp yerleştirildi."
+- "Les gaines ont été raccordées" → "Kılıflar birbirine bağlandı."
+- "Le béton est prêt à être coulé ce soir" → "Beton bu akşam dökülmeye hazırdır."
+- "Les gardes corps ont été posés sur 30m" → "Korkuluklar 30 m boyunca monte edildi."
+- "Harpusta montajı devam ediyor." → "Harpuşta montajına devam edildi."
+
+CATÉGORIES DU CHANTIER : \${(await loadCategories()).join(', ')}
 
 RÈGLES STRICTES :
-1. Chaque ligne commence par "• NomCategorie - action yapıldı."
-2. Traduis tout en turc : ex. "drenaj çalışması yapıldı", "dolgu çalışması yapıldı", "montaj yapıldı", etc.
-3. Préfixe catégorie exact selon la section (Ay Yıldız Köprüsü, Toprakarme, Türk Kızılayı Alt Geçidi, Üst Yapı - 2453 Cadde, Ay Yıldız Tali Yol-01, Bağlantı Yolu-1, Kol-1, Kol-2, 11. Hava Üssü, etc.)
-4. Maximum 17 lignes au total. Si plus, fusionne les actions de même catégorie sur une ligne.
-5. Termine chaque action par "yapıldı." si pas déjà présent.
-6. Orthographe turque correcte avec tous les caractères spéciaux (ş, ğ, ı, ç, ö, ü).
-7. Réponds UNIQUEMENT avec les lignes reformatées, une par ligne. Aucune introduction, aucun commentaire.
-
-Notes brutes :
-${notes}`
+1. Chaque ligne : "• [Catégorie] - [action en turc]."
+2. Utilise EXACTEMENT les noms de catégories listés ci-dessus (respect de la casse et des caractères).
+3. Traduis tout en turc, garde les termes techniques non traduits (pulling stick, refuge, trumplate, 5B...).
+4. Actions en cours → "devam ediyor", actions terminées → "yapıldı" ou "tamamlandı".
+5. Maximum ${CONFIG.maxLignes} lignes. Si plus, fusionne les actions similaires d'une même catégorie.
+6. Orthographe turque parfaite : ş, ğ, ı, ç, ö, ü.
+7. Réponds UNIQUEMENT avec les lignes (commençant par •). Zéro introduction, zéro commentaire.`
+          },
+          {
+            role: 'user',
+            content: `Notes brutes du chantier :
+\${notes}`
         }]
       })
     });
