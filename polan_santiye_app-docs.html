@@ -406,36 +406,6 @@
     </div>
   </div>
 
-  <!-- GOOGLE DOCS SYNC -->
-  <div class="section">
-    <div class="section-label">📄 Notes depuis Google Docs</div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-      <button class="btn btn-outline" onclick="fetchFromDocs()" id="btnDocs" style="flex:1;min-width:200px;">
-        ↓ Charger les notes du jour
-      </button>
-      <span id="docsStatus" style="font-size:13px;color:var(--muted);font-family:Arial,monospace;">
-        Cliquez pour charger les notes depuis le Docs
-      </span>
-    </div>
-    <!-- Tableau de prévisualisation des notes brutes par chef/lieu -->
-    <div id="docsPreview" style="display:none;margin-top:16px;overflow-x:auto;">
-      <table id="docsTable" style="width:100%;border-collapse:collapse;font-size:13px;font-family:Arial,sans-serif;">
-        <thead>
-          <tr>
-            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:6px 0 0 0;">Section</th>
-            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;">M</th>
-            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;">G</th>
-            <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:0 6px 0 0;">P</th>
-          </tr>
-        </thead>
-        <tbody id="docsTableBody"></tbody>
-      </table>
-      <button class="btn btn-gold" onclick="transferDocsToTextarea()" style="margin-top:12px;width:100%;">
-        ✦ Utiliser ces notes → zone de saisie
-      </button>
-    </div>
-  </div>
-
   <!-- NOTES -->
   <div class="section">
     <div class="section-label">Notes du chantier</div>
@@ -449,7 +419,7 @@ Route 2453 drainage et montage mur
 Kol 1 liste
 Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></textarea>
       <div class="notes-toolbar">
-        <span class="notes-hint">Français, turc, anglais ou un mélange · L'IA traduit tout en turc</span>
+        <span class="notes-hint">Français, turc ou les deux · L'IA traduit tout en turc</span>
         <span class="char-count" id="charCount">0 car.</span>
       </div>
     </div>
@@ -492,47 +462,24 @@ Base aérienne 11 - pose pmat et terrassement" oninput="updateCharCount()"></tex
 </div>
 
 <script>
-// ╔══════════════════════════════════════════════════════════╗
-// ║  CONFIG — À MODIFIER POUR CHAQUE CHANTIER               ║
-// ╚══════════════════════════════════════════════════════════╝
-const CONFIG = {
-  // Identité du chantier
-  nomChantier:    'ETİMESGUT HAVAALİNİ BAĞLANTI YOLU',
-  nomSociete:     'POLAN',
-
-  // Clé API Groq (console.groq.com → gratuit)
-  groqApiKey:     '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',
-
-  // URL de l'Apps Script Google (sert les notes du Docs)
-  appsScriptUrl:  'https://script.google.com/macros/s/AKfycbxdgtu8lO600x--JTXVrGUKJe3oxVUsMItM6hwN-oTrXaGBioyztg7XzsC7tj4MbRPj/exec',
-
-  // Référence Sayfa No : date ISO → numéro de page
-  sayfaRefDate:   '2026-05-24',
-  sayfaRefNo:     210,
-
-  // Coordonnées météo (Open-Meteo)
-  meteoLat:       39.9208,
-  meteoLon:       32.8541,
-  meteoTimezone:  'Europe/Istanbul',
-
-  // Nombre max de lignes dans le rapport Excel
-  maxLignes:      17,
-};
-// ╔══════════════════════════════════════════════════════════╗
-// ║  NE PAS MODIFIER EN DESSOUS (sauf si tu sais ce que     ║
-// ║  tu fais)                                               ║
-// ╚══════════════════════════════════════════════════════════╝
-
-const GROQ_API_KEY = CONFIG.groqApiKey;
+// ── CONFIG ──────────────────────────────────────────────────
+const GROQ_API_KEY = 'gsk_REMPLACE_PAR_TA_CLE_GROQ'; // console.groq.com → free
 const GROQ_MODEL   = 'llama-3.3-70b-versatile';
 const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
+// ────────────────────────────────────────────────────────────
 
-// Catégories dynamiques — chargées depuis le Docs via Apps Script
-// (null = pas encore chargées)
-let CATEGORIES_DYNAMIQUES = null;
-
-// Fallback statique si le Docs n'est pas disponible
-const CATEGORIES_FALLBACK = [];
+const CATEGORIES = [
+  'Ay Yıldız Köprüsü',
+  'Toprakarme',
+  'Türk Kızılayı Alt Geçidi',
+  'Üst Yapı',
+  '2453 Cadde',
+  '2453. Cadde',
+  'Ay Yıldız Tali Yol',
+  'Bağlantı Yolu',
+  'Kol-1','Kol 1','Kol-2','Kol 2',
+  '11. Hava Üssü','11 Hava Üssü',
+];
 
 let formattedNotes = [];
 let excelData = null;
@@ -569,7 +516,8 @@ async function fetchTemperature() {
   document.getElementById('tempValue').textContent = '—';
 
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${CONFIG.meteoLat}&longitude=${CONFIG.meteoLon}&daily=temperature_2m_max&start_date=${dateVal}&end_date=${dateVal}&timezone=${encodeURIComponent(CONFIG.meteoTimezone)}`;
+    // Ankara : lat=39.9208, lon=32.8541
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=39.9208&longitude=32.8541&daily=temperature_2m_max&start_date=${dateVal}&end_date=${dateVal}&timezone=Europe%2FIstanbul`;
     const resp = await fetch(url);
     const data = await resp.json();
     const temp = data.daily?.temperature_2m_max?.[0];
@@ -585,134 +533,9 @@ async function fetchTemperature() {
   document.getElementById('tempLoading').style.display = 'none';
 }
 
-// ── Google Docs Integration ─────────────────────────────────
-// Notes pré-parsées par GitHub Actions → docs_notes.json (même domaine, pas de CORS)
-const DOCS_JSON_URL = CONFIG.appsScriptUrl;
-const DOCS_LIEUX = [
-  'Ay Yıldız Köprüsü','Toprakarme','Türk Kızılayı Alt Geçidi',
-  'Üst Yapı - 2453 Cadde','Ay Yıldız Tali Yol-01','Bağlantı Yolu-1',
-  'Kol-1','Kol-2','11. Hava Üssü'
-];
-const MONTHS_TR = {
-  '01':'Ocak','02':'Şubat','03':'Mart','04':'Nisan','05':'Mayıs',
-  '06':'Haziran','07':'Temmuz','08':'Ağustos','09':'Eylül',
-  '10':'Ekim','11':'Kasım','12':'Aralık'
-};
-let docsAllData = null;
-let docsLastFetch = 0;
-let docsNotesData = {};
-let docsRefreshInterval = null;
-
-function isoToDocsLabel(isoDate) {
-  const [yyyy, mm, dd] = isoDate.split('-');
-  return `${dd} ${MONTHS_TR[mm]} ${yyyy}`;
-}
-
-// Récupère les catégories dynamiques depuis le Docs (H2 de la première date)
-async function loadCategories() {
-  if (CATEGORIES_DYNAMIQUES) return CATEGORIES_DYNAMIQUES;
-  try {
-    const resp = await fetch(CONFIG.appsScriptUrl + '?categories=1');
-    if (!resp.ok) throw new Error();
-    const data = await resp.json();
-    if (Array.isArray(data) && data.length > 0) {
-      CATEGORIES_DYNAMIQUES = data;
-      console.log('Catégories chargées depuis le Docs:', CATEGORIES_DYNAMIQUES);
-      return CATEGORIES_DYNAMIQUES;
-    }
-  } catch(e) {
-    console.warn('Catégories non disponibles, fallback statique');
-  }
-  CATEGORIES_DYNAMIQUES = CATEGORIES_FALLBACK;
-  return CATEGORIES_DYNAMIQUES;
-}
-
-async function loadDocsJson(dateLabel) {
-  const url  = DOCS_JSON_URL + '?date=' + encodeURIComponent(dateLabel);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Erreur HTTP ${resp.status}`);
-  return await resp.json();
-}
-
-function renderDocsTable(data) {
-  const tbody = document.getElementById('docsTableBody');
-  const thead = document.querySelector('#docsTable thead tr');
-  tbody.innerHTML = '';
-  docsNotesData = data;
-  thead.innerHTML = `
-    <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:6px 0 0 0;width:35%;">Section</th>
-    <th style="background:var(--gold);color:#fff;padding:8px 12px;text-align:left;border-radius:0 6px 0 0;">Notes saisies</th>`;
-  let total = 0;
-  for (const lieu of DOCS_LIEUX) {
-    const notes = data[lieu] || [];
-    total += notes.length;
-    const tr = document.createElement('tr');
-    tr.style.borderBottom = '1px solid var(--border)';
-    tr.style.background   = notes.length ? 'var(--bg3)' : 'transparent';
-    tr.innerHTML = `
-      <td style="padding:8px 12px;font-weight:bold;color:var(--gold2);vertical-align:top;">${lieu}</td>
-      <td style="padding:8px 12px;vertical-align:top;color:var(--text);white-space:pre-wrap;">${
-        notes.length ? notes.map(n => '• ' + n).join('\n') : '<span style="color:var(--muted)">—</span>'
-      }</td>`;
-    tbody.appendChild(tr);
-  }
-  document.getElementById('docsPreview').style.display = 'block';
-  return total;
-}
-
-function transferDocsToTextarea() {
-  const lines = [];
-  for (const lieu of DOCS_LIEUX) {
-    (docsNotesData[lieu] || []).forEach(n => lines.push(`${lieu} - ${n}`));
-  }
-  if (lines.length) {
-    document.getElementById('notesInput').value = lines.join('\n');
-    updateCharCount();
-    setStatus('success', `✓ ${lines.length} notes chargées`);
-    document.getElementById('notesInput').scrollIntoView({ behavior:'smooth' });
-  } else {
-    setStatus('error', 'Aucune note pour cette date');
-  }
-}
-
-async function fetchFromDocs(silent = false) {
-  const dateVal = document.getElementById('inputDate').value;
-  if (!dateVal) { setStatus('error', "Sélectionne une date d'abord"); return; }
-  const label = isoToDocsLabel(dateVal);
-  const btn = document.getElementById('btnDocs');
-  const ds  = document.getElementById('docsStatus');
-  btn.disabled = true;
-  ds.textContent = 'Chargement…';
-  if (!silent) setStatus('loading', `Lecture des notes pour le ${label}…`);
-  try {
-    const data = await loadDocsJson(label);
-    if (!data || Object.keys(data).length === 0) {
-      ds.textContent = `⚠ Pas de données pour "${label}"`;
-      if (!silent) setStatus('error', `Date "${label}" introuvable`);
-    } else {
-      const total = renderDocsTable(data);
-      const now = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-      ds.textContent = `✓ ${total} notes · ${now}`;
-      if (!silent) setStatus('success', `✓ ${total} notes chargées pour le ${label}`);
-    }
-  } catch(e) {
-    ds.textContent = '✗ ' + e.message;
-    if (!silent) setStatus('error', e.message);
-    console.error(e);
-  }
-  btn.disabled = false;
-}
-
-function startDocsAutoRefresh() {
-  if (docsRefreshInterval) clearInterval(docsRefreshInterval);
-  docsRefreshInterval = setInterval(() => fetchFromDocs(true), 3600000);
-}
-
-startDocsAutoRefresh();
-
-
-const SAYFA_REF_DATE  = new Date(CONFIG.sayfaRefDate + 'T00:00:00');
-const SAYFA_REF_VALUE = CONFIG.sayfaRefNo;
+// ── Auto Sayfa No — référence fixe : 24 Mai 2026 = 210 ─────
+const SAYFA_REF_DATE  = new Date('2026-05-24T00:00:00');
+const SAYFA_REF_VALUE = 210;
 
 function computeSayfa(dateIso) {
   const d = new Date(dateIso + 'T00:00:00');
@@ -729,10 +552,8 @@ function updateSayfaFromDate() {
 document.getElementById('inputDate').addEventListener('change', () => {
   updateSayfaFromDate();
   fetchTemperature();
-  fetchFromDocs(true);
 });
 
-// (date change handled in Docs section above + sayfa/temp below)
 // Char count
 function updateCharCount() {
   const n = document.getElementById('notesInput').value.length;
@@ -784,10 +605,10 @@ function clearAll() {
 // Main: process notes with AI
 async function processNotes() {
   const notes = document.getElementById('notesInput').value.trim();
-  const categories = await loadCategories(); // charge les catégories dynamiques
   const dateVal = document.getElementById('inputDate').value;
   const sayfaNo = document.getElementById('sayfaNo').value;
 
+  if (!CONFIG.groqApiKey) { setStatus('error', '⚠ Renseigne ta clé API Groq dans le champ en haut'); return; }
   if (!notes) { setStatus('error', 'Saisis des notes d\'abord'); return; }
   if (!dateVal) { setStatus('error', 'Sélectionne une date'); return; }
   if (!excelData) { setStatus('error', 'Charge d\'abord le fichier Excel'); return; }
@@ -803,54 +624,30 @@ async function processNotes() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GROQ_API_KEY}`
+        'Authorization': `Bearer ${CONFIG.groqApiKey}`
       },
       body: JSON.stringify({
         model: GROQ_MODEL,
-        max_tokens: 1500,
-        messages: [
-          {
-            role: 'system',
-            content: `Tu es un ingénieur BTP expert en rédaction de rapports journaliers de chantier en Turquie.
-Tu reçois des notes brutes en français, turc, anglais ou un mélange, et tu les reformates en lignes de rapport en turc.
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: `Tu es un assistant de chantier BTP en Turquie.
+Les notes peuvent être en français, en turc, ou un mélange des deux.
+Tu dois TOUJOURS écrire le résultat UNIQUEMENT EN TURC dans le rapport.
 
-VOCABULAIRE BTP DE RÉFÉRENCE (utilise ces termes exacts) :
-- coffrage → kalıp | décoffrage → kalıp sökümü | ferraillage → demir/donatı
-- béton → beton | coulage béton → beton dökümü | segment → segment
-- câble extradossé → ekstra dos kablo | gaine → kılıf | pylône → pilon
-- trumplate/trumplate → ankraj plakası | pulling stick → pulling stick
-- garde-corps → korkuluk | trottoir → kaldırım | drainage → drenaj
-- harpuşta/harpusta → harpuşta | refuge → refuge | grue → vinç
-- injection → enjeksiyon | compresseur → kompresör | huiler → yağlamak
-- terrassement → kazı | remblai → dolgu | montage → montaj | pose → döşeme
-- en cours / continue → devam ediyor | terminé/fini → tamamlandı/yapıldı
-- vérification → kontrol | nettoyage → temizlik | mise en place → yerleştirme
-
-EXEMPLES DE TRADUCTIONS CORRECTES :
-- "Le coffrage du pont a été replacé, nettoyé et huilé" → "Köprünün kalıbı yeniden yerleştirildi, temizlendi ve yağlandı."
-- "Le ferraillage du pylône continue" → "Pilon donatı çalışmaları devam ediyor."
-- "Les 5B ont été tirés avant le béton" → "5B kabloları beton dökülmeden önce çekilip yerleştirildi."
-- "Le coffrage latéral a été posé" → "Yan kalıp yerleştirildi."
-- "Les gaines ont été raccordées" → "Kılıflar birbirine bağlandı."
-- "Le béton est prêt à être coulé ce soir" → "Beton bu akşam dökülmeye hazırdır."
-- "Les gardes corps ont été posés sur 30m" → "Korkuluklar 30 m boyunca monte edildi."
-- "Harpusta montajı devam ediyor." → "Harpuşta montajına devam edildi."
-
-CATÉGORIES DU CHANTIER : \${(await loadCategories()).join(', ')}
+Reformate ces notes de chantier en lignes claires pour un rapport journalier Excel.
 
 RÈGLES STRICTES :
-1. Chaque ligne : "• [Catégorie] - [action en turc]."
-2. Utilise EXACTEMENT les noms de catégories listés ci-dessus (respect de la casse et des caractères).
-3. Traduis tout en turc, garde les termes techniques non traduits (pulling stick, refuge, trumplate, 5B...).
-4. Actions en cours → "devam ediyor", actions terminées → "yapıldı" ou "tamamlandı".
-5. Maximum ${CONFIG.maxLignes} lignes. Si plus, fusionne les actions similaires d'une même catégorie.
-6. Orthographe turque parfaite : ş, ğ, ı, ç, ö, ü.
-7. Réponds UNIQUEMENT avec les lignes (commençant par •). Zéro introduction, zéro commentaire.`
-          },
-          {
-            role: 'user',
-            content: `Notes brutes du chantier :
-\${notes}`
+1. Chaque ligne commence par "• NomCategorie - action yapıldı."
+2. Traduis tout en turc : ex. "drenaj çalışması yapıldı", "dolgu çalışması yapıldı", "montaj yapıldı", etc.
+3. Préfixe catégorie exact selon la section (Ay Yıldız Köprüsü, Toprakarme, Türk Kızılayı Alt Geçidi, Üst Yapı - 2453 Cadde, Ay Yıldız Tali Yol-01, Bağlantı Yolu-1, Kol-1, Kol-2, 11. Hava Üssü, etc.)
+4. Maximum 17 lignes au total. Si plus, fusionne les actions de même catégorie sur une ligne.
+5. Termine chaque action par "yapıldı." si pas déjà présent.
+6. Orthographe turque correcte avec tous les caractères spéciaux (ş, ğ, ı, ç, ö, ü).
+7. Réponds UNIQUEMENT avec les lignes reformatées, une par ligne. Aucune introduction, aucun commentaire.
+
+Notes brutes :
+${notes}`
         }]
       })
     });
@@ -1064,7 +861,34 @@ async function generateExcel() {
   btn.disabled = false;
 }
 
-initDate();
+// Clé API Groq — stockée dans localStorage uniquement
+function saveGroqKey() {
+  const key = document.getElementById('groqKeyInput').value.trim();
+  if (key) {
+    localStorage.setItem('groq_api_key', key);
+    CONFIG.groqApiKey = key;
+    document.getElementById('groqKeyStatus').textContent = '✓ Sauvegardée';
+    document.getElementById('groqKeyStatus').style.color = 'var(--green)';
+  }
+}
+
+function loadGroqKey() {
+  const saved = localStorage.getItem('groq_api_key');
+  if (saved) {
+    document.getElementById('groqKeyInput').value = saved;
+    CONFIG.groqApiKey = saved;
+    document.getElementById('groqKeyStatus').textContent = '✓ Chargée';
+    document.getElementById('groqKeyStatus').style.color = 'var(--green)';
+  } else {
+    document.getElementById('groqKeyStatus').textContent = '⚠ Manquante';
+    document.getElementById('groqKeyStatus').style.color = 'var(--red)';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initDate();
+  loadGroqKey();
+});
 </script>
 </body>
 </html>
