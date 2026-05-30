@@ -819,52 +819,53 @@ async function processNotes() {
         'Authorization': `Bearer ${getGroqKey()}`
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model: 'mixtral-8x7b-32768',
         max_tokens: 1500,
         messages: [
           {
             role: 'system',
-            content: `Tu es un ingénieur BTP expert en rédaction de rapports journaliers de chantier en Turquie.
-Tu reçois des notes brutes en français, turc, anglais ou un mélange, et tu les reformates en lignes de rapport en turc.
-
-VOCABULAIRE BTP DE RÉFÉRENCE (utilise ces termes exacts) :
-- coffrage → kalıp | décoffrage → kalıp sökümü | ferraillage → demir/donatı
-- béton → beton | coulage béton → beton dökümü | segment → segment
-- câble extradossé → ekstra dos kablo | gaine → kılıf | pylône → pilon
-- trumplate/trumplate → ankraj plakası | pulling stick → pulling stick
-- garde-corps → korkuluk | trottoir → kaldırım | drainage → drenaj
-- harpuşta/harpusta → harpuşta | refuge → refuge | grue → vinç
-- injection → enjeksiyon | compresseur → kompresör | huiler → yağlamak
-- terrassement → kazı | remblai → dolgu | montage → montaj | pose → döşeme
-- en cours / continue → devam ediyor | terminé/fini → tamamlandı/yapıldı
-- vérification → kontrol | nettoyage → temizlik | mise en place → yerleştirme
-
-EXEMPLES DE TRADUCTIONS CORRECTES :
-- "Le coffrage du pont a été replacé, nettoyé et huilé" → "Köprünün kalıbı yeniden yerleştirildi, temizlendi ve yağlandı."
-- "Le ferraillage du pylône continue" → "Pilon donatı çalışmaları devam ediyor."
-- "Les 5B ont été tirés avant le béton" → "5B kabloları beton dökülmeden önce çekilip yerleştirildi."
-- "Le coffrage latéral a été posé" → "Yan kalıp yerleştirildi."
-- "Les gaines ont été raccordées" → "Kılıflar birbirine bağlandı."
-- "Le béton est prêt à être coulé ce soir" → "Beton bu akşam dökülmeye hazırdır."
-- "Les gardes corps ont été posés sur 30m" → "Korkuluklar 30 m boyunca monte edildi."
-- "Harpusta montajı devam ediyor." → "Harpuşta montajına devam edildi."
-
-CATÉGORIES DU CHANTIER : \${(await loadCategories()).join(', ')}
-
-RÈGLES STRICTES :
-1. Chaque ligne : "• [Catégorie] - [action en turc]."
-2. Utilise EXACTEMENT les noms de catégories listés ci-dessus (respect de la casse et des caractères).
-3. Traduis tout en turc, garde les termes techniques non traduits (pulling stick, refuge, trumplate, 5B...).
-4. Actions en cours → "devam ediyor", actions terminées → "yapıldı" ou "tamamlandı".
-5. Maximum ${CONFIG.maxLignes} lignes. Si plus, fusionne les actions similaires d'une même catégorie.
-6. Orthographe turque parfaite : ş, ğ, ı, ç, ö, ü.
-7. Réponds UNIQUEMENT avec les lignes (commençant par •). Zéro introduction, zéro commentaire.`
+            content: [
+              'Tu es un ingénieur BTP expert en rédaction de rapports journaliers de chantier en Turquie.',
+              'Tu reçois des notes brutes en français, turc, anglais ou un mélange, et tu les reformates en lignes de rapport en turc.',
+              '',
+              'VOCABULAIRE BTP DE RÉFÉRENCE (utilise ces termes exacts) :',
+              '- coffrage → kalıp | décoffrage → kalıp sökümü | ferraillage → demir/donatı',
+              '- béton → beton | coulage béton → beton dökümü | segment → segment',
+              '- câble extradossé → ekstra dos kablo | gaine → kılıf | pylône → pilon',
+              '- trumplate → ankraj plakası | pulling stick → pulling stick',
+              '- garde-corps → korkuluk | trottoir → kaldırım | drainage → drenaj',
+              '- harpuşta/harpusta → harpuşta | refuge → refuge | grue → vinç',
+              '- injection → enjeksiyon | compresseur → kompresör | huiler → yağlamak',
+              '- terrassement → kazı | remblai → dolgu | montage → montaj | pose → döşeme',
+              '- en cours / continue → devam ediyor | terminé/fini → tamamlandı/yapıldı',
+              '- vérification → kontrol | nettoyage → temizlik | mise en place → yerleştirme',
+              '',
+              'EXEMPLES DE TRADUCTIONS CORRECTES :',
+              '- "Le coffrage du pont a été replacé, nettoyé et huilé" → "Köprünün kalıbı yeniden yerleştirildi, temizlendi ve yağlandı."',
+              '- "Le ferraillage du pylône continue" → "Pilon donatı çalışmaları devam ediyor."',
+              '- "Les 5B ont été tirés avant le béton" → "5B kabloları beton dökülmeden önce çekilip yerleştirildi."',
+              '- "Le coffrage latéral a été posé" → "Yan kalıp yerleştirildi."',
+              '- "Les gaines ont été raccordées" → "Kılıflar birbirine bağlandı."',
+              '- "Le béton est prêt à être coulé ce soir" → "Beton bu akşam dökülmeye hazırdır."',
+              '- "Les gardes corps ont été posés sur 30m" → "Korkuluklar 30 m boyunca monte edildi."',
+              '- "Harpusta montajı devam ediyor." → "Harpuşta montajına devam edildi."',
+              '',
+              'CATÉGORIES DU CHANTIER : ' + categories.join(', '),
+              '',
+              'RÈGLES STRICTES :',
+              '1. Chaque ligne : "• [Catégorie] - [action en turc]."',
+              '2. Utilise EXACTEMENT les noms de catégories listés ci-dessus (respect de la casse et des caractères).',
+              '3. Traduis tout en turc, garde les termes techniques non traduits (pulling stick, refuge, trumplate, 5B...).',
+              '4. Actions en cours → "devam ediyor", actions terminées → "yapıldı" ou "tamamlandı".',
+              '5. Maximum ' + CONFIG.maxLignes + ' lignes. Si plus, fusionne les actions similaires d\'une même catégorie.',
+              '6. Orthographe turque parfaite : ş, ğ, ı, ç, ö, ü.',
+              '7. Réponds UNIQUEMENT avec les lignes (commençant par •). Zéro introduction, zéro commentaire.'
+            ].join('\n')
           },
           {
             role: 'user',
-            content: `Notes brutes du chantier :
-\${notes}`
-        }]
+            content: 'Notes brutes du chantier :\n' + notes
+          }]
       })
     });
 
